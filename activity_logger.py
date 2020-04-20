@@ -37,10 +37,10 @@ class category:
 
 def load_conf():
     config = configparser.ConfigParser()
-    config.read("act_log.ini")
+    config.read(os.path.expanduser("./activity_log/act_log.ini"))
     folder = config["Folder"]["folder"]
-    idle_time = int(config["magic numbers"]["idle_time"])*1000
-    write_frequency = int(config["magic numbers"]["write_frequency"])*1000
+    idle_time = int(config["magic numbers"]["idle_time"]) * 1000
+    write_frequency = int(config["magic numbers"]["write_frequency"]) * 1000
     categories = {}
     for item in config["Categories"]:
         categories[item] = category(item, config["Categories"][item].split(","))
@@ -76,9 +76,7 @@ def get_active_window_title():
 
     return None
 
-
 categories, folder, idle_time, write_frequency = load_conf()
-
 
 class activity_recorder:
     """
@@ -95,6 +93,7 @@ class activity_recorder:
         self.total_time = 0
         self.idle = False
         self.update = False
+        self.idle_dur = 0
 
     def __reset__(self):
         for cat in categories:
@@ -102,46 +101,36 @@ class activity_recorder:
         self.total_time = 0
 
     def count_time(self):
-        if int(subprocess.check_output("xprintidle")) > idle_time and not self.idle:
-            print("Start idling")
-            self.idle = True
-            self.idle_time = time.time()
-        if int(subprocess.check_output("xprintidle")) <= idle_time and self.idle:
-            print("Stop idling")
-            self.idle = False
-            self.idle_time = time.time() - self.idle_time
-            self.update = True
-            print(self.idle_time)
-        if date.today() != self.current_date:
-            self.save(self.current_date)
-            self.current_date = date.today()
-        window_name = str(get_active_window_title()).lower()
-        found = False
-        for item in self.current_category.keywords:
-            if item in window_name:
-                found = True
-        if not found:
-            if self.update:
+        if int(subprocess.check_output("xprintidle")) <= idle_time:
+            if date.today() != self.current_date:
+                self.save(self.current_date)
+                self.current_date = date.today()
+            window_name = str(get_active_window_title()).lower()
+            found = False
+            for item in self.current_category.keywords:
+                if item in window_name:
+                    found = True
+            if not found:
                 self.current_category.time += (
-                    time.time() - self.start_time - self.idle_time
+                    time.time() - self.start_time - self.idle_dur/1000
                 )
-                self.total_time += time.time() - self.start_time - self.idle_time
-                self.update = False
-            else:
-                self.current_category.time += time.time() - self.start_time
-                self.total_time += time.time() - self.start_time
-            self.start_time = time.time()
-            found_cat = False
-            for cat in categories.values():
-                for keyword in cat.keywords:
-                    if keyword in window_name:
-                        found_cat = True
-                        self.current_category = cat
-                print(cat.name, cat.time)
-            if not found_cat:
-                self.current_category = categories["other"]
-            print(self.total_time)
-            print("_________________________")
+                self.total_time += time.time() - self.start_time - self.idle_dur/1000
+                self.start_time = time.time()
+                self.idle_dur = 0
+                found_cat = False
+                for cat in categories.values():
+                    for keyword in cat.keywords:
+                        if keyword in window_name:
+                            found_cat = True
+                            self.current_category = cat
+                    print(cat.name, cat.time)
+                if not found_cat:
+                    self.current_category = categories["other"]
+                print(self.total_time)
+                print("_________________________")
+        else:
+            self.idle = True
+            self.idle_dur = int(subprocess.check_output("xprintidle"))
 
     def load(self, filename):
         filename = str(filename)
